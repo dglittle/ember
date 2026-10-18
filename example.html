@@ -1,0 +1,60 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>🔥 ember</title>
+<style>
+  body { font: 15px/1.5 -apple-system, system-ui, sans-serif; background: #1d1612; color: #eee4d8; max-width: 720px; margin: 32px auto; padding: 0 18px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .meta { color: #a8968a; font-size: 13px; }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 10px; background: #3a2a1c; font-size: 13px; }
+  .pill.running { background: #6a4a10; } .pill.done { background: #2d5a2d; } .pill.failed, .pill.stalled { background: #7a2a2a; }
+  .bar { height: 12px; background: #2c2118; border-radius: 6px; overflow: hidden; margin: 14px 0 6px; }
+  .bar div { height: 100%; background: linear-gradient(90deg, #e07a2c, #f2b84b); transition: width .3s; }
+  button { font: inherit; padding: 6px 14px; border-radius: 8px; border: 1px solid #6a4a30; background: #2c2118; color: #eee4d8; cursor: pointer; margin-right: 6px; }
+  button:hover { background: #3a2a1c; }
+  ul { padding-left: 18px; color: #cbb9aa; }
+</style></head><body>
+<h1 id="title">🔥 …</h1>
+<div class="meta"><span id="status" class="pill">connecting</span> <span id="times"></span></div>
+<div class="bar"><div id="fill" style="width:0"></div></div>
+<div id="msg" class="meta"></div>
+<p id="btns"></p>
+<div id="tells"></div>
+<script>
+/*SHELF*/
+const K = new URLSearchParams(location.hash.slice(1)).get('k') || '';
+const q = K ? '?k=' + encodeURIComponent(K) : '';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ago = (t) => { const s = Math.round((Date.now() - t) / 1000); return s < 90 ? s + 's' : Math.round(s / 60) + 'm'; };
+let doc = [null, null];
+function render() {
+  const s = doc[0]; if (!s) return;
+  const stalled = (s.status === 'running' || s.status === 'paused') && Date.now() - (s.beat || 0) > 90000;
+  document.title = (s.emoji || '🔥') + ' ' + s.title;
+  $('title').textContent = (s.emoji || '🔥') + ' ' + s.title;
+  $('status').textContent = stalled ? 'stalled' : s.status;
+  $('status').className = 'pill ' + (stalled ? 'stalled' : s.status);
+  $('times').textContent = 'started ' + ago(s.started) + ' ago' + (s.ended ? ' · ended ' + ago(s.ended) + ' ago' : '') + (s.error ? ' · ' + s.error : '');
+  const p = s.progress || {};
+  $('fill').style.width = (p.total ? 100 * p.done / p.total : 0) + '%';
+  $('msg').textContent = (p.total ? p.done + ' / ' + p.total + ' · ' : '') + (p.msg || '');
+  const c = s.controls || {}, live = !['done', 'failed', 'stopped'].includes(s.status), b = [];
+  if (live && c.pause && s.status === 'running') b.push('<button data-a="pause">⏸ pause</button>');
+  if (live && c.resume && s.status === 'paused') b.push('<button data-a="resume">▶ resume</button>');
+  if (live && c.stop) b.push('<button data-a="stop">■ stop</button>');
+  $('btns').innerHTML = b.join('');
+  $('tells').innerHTML = (s.tell || []).length ? '<ul>' + s.tell.map((m) => `<li>${esc(m.text)} <span class="meta">${ago(m.t)} ago</span></li>`).join('') + '</ul>' : '';
+}
+$('btns').addEventListener('click', async (e) => {
+  const a = e.target.dataset.a; if (!a) return;
+  if (a === 'stop' && !confirm('stop this ember?')) return;
+  const r = await fetch('control' + q, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: a }) }).then((r) => r.json());
+  if (!r.ok) alert(r.error);
+});
+const es = new EventSource('state' + q);
+es.addEventListener('shelf', (e) => { doc = [null, null]; shelf_merge(doc, JSON.parse(e.data)); render(); });
+es.addEventListener('delta', (e) => { shelf_merge(doc, JSON.parse(e.data)); render(); });
+es.onerror = () => { $('status').textContent = 'reconnecting'; $('status').className = 'pill'; };
+setInterval(render, 5000);   // keep "ago" and "stalled" honest between deltas
+</script>
+</body></html>
