@@ -123,7 +123,8 @@ None of these is part of the contract, but each has saved real runs.
 |---|---|
 | `shelf.js` | `shelf_merge`, verbatim from [dglittle/shelf](https://github.com/dglittle/shelf); works in Node and in the browser |
 | `example.js` + `example.html` | a minimal ember: counts to N, with pause/resume/stop |
-| `ember.js` | the client: `get`, `watch`, `stop`, `pause`, `resume` |
+| `ember.js` | the client for any ember: `get`, `watch`, `stop`, `pause`, `resume` (give it a URL); also the optional job runner (give it a job id; see [RUNNER.md](RUNNER.md)) |
+| `hub.html`, `page.html`, `templates/` | the job runner's pages and run.js starters |
 
 ## Not in v1 (added when something uses it)
 

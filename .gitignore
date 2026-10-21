@@ -2,3 +2,10 @@ cert.pem
 key.pem
 node_modules/
 .DS_Store
+# the job runner's data and logs (a live checkout keeps its jobs here)
+jobs/
+hub.json
+*.log
+*.bak*
+*.tmp
+factory-tools/
