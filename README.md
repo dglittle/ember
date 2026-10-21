@@ -116,6 +116,9 @@ Some suggestions for long work:
 - **Make it survive restarts:** save progress to disk, and on start skip what's done.
 - **Guard the machine:** cap concurrency and wait for free memory before starting heavy children.
 - **Put a budget in `spent`** and refuse new paid work once it's spent.
+- **Keep it alive across crashes and reboots,** e.g. with a cron line that starts it only if it isn't already
+  running: `* * * * * cd /path && flock -n run.lock node my-ember.js --keepalive`. Once it has been closed, have
+  `--keepalive` leave it closed (remember the close in a file), so removing it really removes it.
 
 None of these is part of the contract, but each has saved real runs.
 
@@ -125,8 +128,7 @@ None of these is part of the contract, but each has saved real runs.
 |---|---|
 | `shelf.js` | `shelf_merge`, verbatim from [dglittle/shelf](https://github.com/dglittle/shelf); works in Node and in the browser |
 | `example.js` + `example.html` | a minimal ember: counts to N, with pause/resume/stop/close |
-| `ember.js` | the client for any ember: `get`, `watch`, `stop`, `pause`, `resume`, `close` (give it a URL); also the optional job runner (give it a job id; see [RUNNER.md](RUNNER.md)) |
-| `hub.html`, `page.html`, `templates/` | the job runner's pages and run.js starters |
+| `ember.js` | the client for any ember: `get`, `watch`, `stop`, `pause`, `resume`, `close` |
 
 ## Not in v1 (added when something uses it)
 
