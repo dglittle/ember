@@ -4,7 +4,8 @@
 //
 //   GET  /          the dashboard (needs no key; it reads #k=<key> and passes it on)
 //   GET  /state     SSE: event "shelf" (the full shelf) first, then an event "delta" per change; ": ping" every 15 s
-//   POST /control   {"action":"stop"|"pause"|"resume"} → {ok, status} or {ok:false, error}
+//   POST /control   {"action":"stop"|"pause"|"resume"|"close"} → {ok, status} or {ok:false, error}
+//                   close = nobody needs this ember any more: stop the work if it's running, answer, then exit
 //
 // Served over HTTP/2 + TLS (HTTP/1.1 also accepted). Node built-ins only.
 // Env: EMBER_PORT (63200) · EMBER_TLS_CERT / EMBER_TLS_KEY (default ./cert.pem, ./key.pem) · EMBER_KEY (unset = open)
@@ -36,7 +37,7 @@ const tell = (text) => set({ tell: [...(S().tell || []), { t: Date.now(), text }
 const owner = process.env.EMBER_OWNER_TOWER && process.env.EMBER_OWNER_PLANE
   ? { tower: process.env.EMBER_OWNER_TOWER, plane: process.env.EMBER_OWNER_PLANE } : null;
 set({ ember: 1, title: TITLE, emoji: '🔥', status: 'running', progress: { done: 0, total: TOTAL, msg: 'starting' },
-  started: Date.now(), beat: Date.now(), controls: { stop: true, pause: true, resume: true }, owner, tell: [] });
+  started: Date.now(), beat: Date.now(), controls: { stop: true, pause: true, resume: true, close: true }, owner, tell: [] });
 
 // ---------- the work ----------
 function tick() {
@@ -49,11 +50,16 @@ const work = setInterval(tick, STEP_MS);
 const beat = setInterval(() => set({ beat: Date.now() }), 10000);   // liveness: ≤ 30 s apart while not finished
 function finish(status, error) {
   clearInterval(work); clearInterval(beat);
-  set({ status, ended: Date.now(), error: error || null });
+  set({ status, ended: Date.now(), error: error || null, controls: { stop: null, pause: null, resume: null } });   // only close is left
   tell(`${TITLE}: ${status} · ${S().progress.done}/${TOTAL}${error ? ' · ' + error : ''}`);
 }
 function control(action) {
   const st = S().status;
+  if (action === 'close') {
+    if (!TERMINAL.has(st)) finish('stopped');
+    setTimeout(() => { console.log('closed'); process.exit(0); }, 300);   // answer first, then exit
+    return { ok: true, status: S().status };
+  }
   if (TERMINAL.has(st)) return { ok: false, error: 'already ' + st };
   if (action === 'stop') finish('stopped');
   else if (action === 'pause' && st === 'running') set({ status: 'paused' });

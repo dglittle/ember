@@ -21,9 +21,11 @@ Paths are relative to the ember's base URL `B/`. Embers can live under a path, l
 |---|---|
 | `GET B/` | **the dashboard** (HTML). Show whatever suits the work. |
 | `GET B/state` | **the state, as Server-Sent Events** (see below). This is the only way to read state. |
-| `POST B/control` `{"action":"stop"}` | **stop the work** → `{"ok":true,"status":…}`, or `{"ok":false,"error":…}` (409). `"pause"` and `"resume"` too, if `controls` lists them. |
+| `POST B/control` `{"action":"stop"}` | **stop the work** → `{"ok":true,"status":…}`, or `{"ok":false,"error":…}` (409). `"pause"` and `"resume"` too, if `controls` lists them. `"close"` too, if listed (see below). |
 
-**After the work ends, an ember keeps serving** all three endpoints (the final state, and a dashboard without live controls) until someone removes it. The page is often most useful once the work is done.
+**After the work ends, an ember keeps serving** all three endpoints (the final state, and a dashboard without live controls) until someone **closes** it. The page is often most useful once the work is done.
+
+**`close`** (optional, listed in `controls` when supported) means "nobody needs this ember any more". Stop the work if it's still running, answer, then stop serving: a standalone ember exits, and a hub that serves many embers just drops this one. Airport sends `close` when you remove an ember's tile. Without it, a finished ember lives forever and holds its memory. Before exiting, an ember may save whatever it needs to show its final state again if someone restarts it.
 
 ### `B/state`: the SSE stream
 
@@ -58,7 +60,7 @@ The ember is the **only writer**. Clients only read the state; commands go throu
 | `beat` | ms since the Unix epoch | updated at least every 30 s until the work ends. A client treats `running` or `paused` with `now − beat > 90 s` as **stalled** (the work died but the server didn't) |
 | `error` | string | when `failed` (or anything worth showing) |
 | `spent` | `{usd, budget}` | optional |
-| `controls` | `{stop: true, pause?: true, resume?: true}` | the actions `/control` accepts |
+| `controls` | `{stop: true, pause?: true, resume?: true, close?: true}` | the actions `/control` accepts (after the work ends, often just `close`) |
 | `owner` | `{tower, plane}` | optional: the airport plane this ember reports to |
 | `tell` | `[{t, text}, …]` | **messages for the owner**: the last 3, newest last. `t` (ms) identifies a message; a reader delivers each `t` it hasn't seen yet |
 
@@ -86,7 +88,7 @@ Open that link (your browser will warn about the self-signed certificate). In an
 ```bash
 node ember.js get   'https://localhost:63200/#k=sekrit' --insecure   # the state, as JSON
 node ember.js watch 'https://localhost:63200/#k=sekrit' --insecure   # a line per change, until it ends
-node ember.js pause 'https://localhost:63200/#k=sekrit' --insecure   # also: resume, stop
+node ember.js pause 'https://localhost:63200/#k=sekrit' --insecure   # also: resume, stop, close
 curl -skN --http2 -H 'Authorization: Bearer sekrit' https://localhost:63200/state   # the raw stream
 ```
 
@@ -108,7 +110,7 @@ Copy [`example.js`](example.js), [`example.html`](example.html) and [`shelf.js`]
 4. **Keep `beat` fresh** while the work runs. Set `status`, `ended` and maybe `error` when it stops.
 5. **Make `stop` actually stop the work,** including child processes (start them in their own process group and kill the group).
 6. **When the work ends** (or needs a human), push a line onto `tell`, keeping the last 3.
-7. **Keep serving after the work ends.**
+7. **Keep serving after the work ends,** until `close` arrives. Then exit (or, for a hub, drop that ember).
 
 Some suggestions for long work:
 - **Make it survive restarts:** save progress to disk, and on start skip what's done.
@@ -122,8 +124,8 @@ None of these is part of the contract, but each has saved real runs.
 | | |
 |---|---|
 | `shelf.js` | `shelf_merge`, verbatim from [dglittle/shelf](https://github.com/dglittle/shelf); works in Node and in the browser |
-| `example.js` + `example.html` | a minimal ember: counts to N, with pause/resume/stop |
-| `ember.js` | the client for any ember: `get`, `watch`, `stop`, `pause`, `resume` (give it a URL); also the optional job runner (give it a job id; see [RUNNER.md](RUNNER.md)) |
+| `example.js` + `example.html` | a minimal ember: counts to N, with pause/resume/stop/close |
+| `ember.js` | the client for any ember: `get`, `watch`, `stop`, `pause`, `resume`, `close` (give it a URL); also the optional job runner (give it a job id; see [RUNNER.md](RUNNER.md)) |
 | `hub.html`, `page.html`, `templates/` | the job runner's pages and run.js starters |
 
 ## Not in v1 (added when something uses it)

@@ -4,7 +4,7 @@
 // 1. A CLIENT for ANY ember: give it the ember's URL (a key rides along as #k=…, ?k=… or EMBER_KEY).
 //      node ember.js get    <url>                 the ember's current state as JSON, then exit
 //      node ember.js watch  <url>                 one line per change (status · progress · new tells) until it ends
-//      node ember.js stop|pause|resume <url>      POST /control
+//      node ember.js stop|pause|resume|close <url>   POST /control (close: nobody needs it any more; it stops and exits)
 //    --insecure (or EMBER_INSECURE=1) accepts a self-signed certificate.
 //
 // 2. A JOB RUNNER (optional): long-running jobs as directories, all served as embers by one hub. A job is
@@ -347,8 +347,10 @@ function hub() {
         if (m[2] === 'control' && req.method === 'POST') {
           let body = ''; req.on('data', d => { body += d; if (body.length > 1e5) req.destroy(); }); req.on('end', () => {
             let action = ''; try { action = String(JSON.parse(body || '{}').action || ''); } catch (_) {}
-            const want = { stop: 'cancel', pause: 'pause', resume: 'run' }[action];
             const cur = contractState(m[1]);
+            // close: the hub drops nothing (it serves every job), but a running job is stopped: nobody needs it any more
+            if (action === 'close') { if (!C_FINAL.has(cur.status)) { try { setWant(m[1], 'cancel'); } catch (_) {} } return send(res, 200, { ok: true, status: C_FINAL.has(cur.status) ? cur.status : 'stopping' }); }
+            const want = { stop: 'cancel', pause: 'pause', resume: 'run' }[action];
             if (!want) return send(res, 409, { ok: false, error: 'action must be ' + Object.keys(cur.controls || {}).join('|') });
             if (C_FINAL.has(cur.status)) return send(res, 409, { ok: false, error: 'already ' + cur.status });
             try { setWant(m[1], want); } catch (e) { return send(res, 409, { ok: false, error: e.message }); }
@@ -405,7 +407,7 @@ function contractState(id) {
     progress: { done: +p.done || 0, total: +p.total || 0, msg: String(p.msg || '') },
     started: msOf(st.started), ended: final ? msOf(st.ended) : null, beat: msOf(st.beat),
     error: err, spent: { usd: +(st.spent || 0), budget: spec.budget_usd || null },
-    controls: final ? {} : { stop: true, pause: true, resume: true },
+    controls: final ? { close: true } : { stop: true, pause: true, resume: true, close: true },
     owner: spec.owner && spec.owner.plane ? { tower: spec.owner.tower || '', plane: spec.owner.plane } : null,
     tell: tell.slice(-3),
     live: Object.values(st.sessions || {}).filter((s) => s.status === 'running').length,   // the job's own: running claude sessions
@@ -485,7 +487,7 @@ function client(cmd, raw) {
   const client = http2.connect(u.origin, { rejectUnauthorized: !insecure });
   client.on('error', (e) => die(e.message));
 
-  if (['stop', 'pause', 'resume'].includes(cmd)) {
+  if (['stop', 'pause', 'resume', 'close'].includes(cmd)) {
     const req = client.request(headers({ ':method': 'POST', ':path': base + 'control', 'content-type': 'application/json' }));
     let out = '';
     req.on('data', (d) => (out += d));
